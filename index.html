@@ -153,6 +153,49 @@
     .room-btn.armed,.kick-btn.armed{background:var(--honey);color:var(--ink);animation:shake .5s ease 2}
     .kick-btn{margin-left:6px;height:30px;padding:0 10px;border-radius:999px;border:2px solid var(--red);background:transparent;color:#ffb3c0;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap}
     .kick-btn:hover{background:var(--red);color:#fff}
+    .side-panel .lobby-rules{grid-template-columns:1fr}
+    .side-panel .lobby-rule{min-height:0}
+    .qr{flex:0 0 auto;width:132px;height:132px;padding:6px;background:#fff;border:3px solid #0d0719;border-radius:16px;box-shadow:0 4px 0 #0d0719}
+    .qr svg{display:block;width:100%;height:100%}
+    .share-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+    .share-actions .btn{flex:1 1 140px}
+    .btn-ghost{background:transparent;color:var(--text);border-color:var(--line)}
+    .you-tag{background:var(--cyan);color:var(--ink);padding:2px 6px;border-radius:6px;font-weight:800;font-size:9px;margin-left:6px}
+    .player-row.me{border-color:var(--cyan);box-shadow:inset 0 0 0 1px var(--cyan)}
+    .score-row.me .score-name{color:var(--cyan)}
+    .host-btn{border-color:var(--honey);color:var(--honey)}
+    .host-btn:hover{background:var(--honey);color:var(--ink)}
+    .settings{margin:0 0 20px;padding:16px;border:2px solid var(--line);border-radius:20px;background:var(--panel-2)}
+    .side-panel .settings{margin:16px 0 0}
+    .setting-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
+    .setting-label{min-width:64px;font-weight:700;color:var(--muted);font-size:13px}
+    .seg{display:flex;flex-wrap:wrap;gap:6px}
+    .seg-btn{height:36px;padding:0 12px;border-radius:999px;border:2px solid var(--line);background:#150b26;color:var(--text);font-weight:700;font-size:13px;cursor:pointer}
+    .seg-btn.on{background:var(--honey);color:var(--ink);border-color:#0d0719;box-shadow:0 3px 0 #0d0719}
+    .settings-summary{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+    .textarea{height:auto;min-height:120px;padding:12px 14px;resize:vertical;font-size:15px;line-height:1.4}
+    .custom-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .host-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+    .host-tools .btn{height:44px;font-size:14px}
+    .react-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+    .react-btn{width:46px;height:46px;border-radius:14px;border:2px solid var(--line);background:var(--panel-2);font-size:22px;cursor:pointer;transition:transform .1s}
+    .react-btn:hover{transform:translateY(-2px) scale(1.08)}.react-btn:active{transform:scale(.9)}
+    .react-layer{position:fixed;inset:0;pointer-events:none;z-index:30;overflow:hidden}
+    .react-float{position:absolute;bottom:-60px;display:flex;flex-direction:column;align-items:center;animation:floatUp 3s ease-out forwards}
+    .react-emoji{font-size:44px;line-height:1}
+    .react-name{font-size:11px;font-weight:700;color:var(--text);background:rgba(13,7,25,.7);padding:2px 8px;border-radius:99px;margin-top:2px}
+    @keyframes floatUp{0%{transform:translateY(0) scale(.6);opacity:0}15%{opacity:1;transform:translateY(-15vh) scale(1.1)}100%{transform:translateY(-85vh) scale(1);opacity:0}}
+    .awards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 20px}
+    .award{position:relative;padding:16px;border:3px solid #0d0719;border-radius:20px;box-shadow:0 5px 0 #0d0719;color:var(--ink);animation:pop .5s cubic-bezier(.3,1.6,.5,1) both}
+    .award-queen{background:var(--honey)}.award-soulmates{background:var(--pink);color:#fff}.award-lone{background:var(--cyan)}
+    .award:nth-child(2){animation-delay:.15s}.award:nth-child(3){animation-delay:.3s}
+    .award-icon{position:absolute;right:12px;top:6px;font-size:30px;opacity:.35}
+    .award-title{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+    .award-names{font:800 22px var(--display);margin:4px 0;overflow-wrap:anywhere}
+    .award-detail{font-size:12px;font-weight:600;opacity:.85}
+    .sound-btn{font-size:18px}
+    @media(max-width:650px){.code-share .share-top{flex-wrap:wrap}.qr{width:120px;height:120px}.setting-label{min-width:0;width:100%}.react-btn{width:42px;height:42px}}
+    @media(prefers-reduced-motion:reduce){.react-float{animation-duration:.01ms}}
     .confetti{position:fixed;top:-20px;z-index:20;width:10px;height:16px;border-radius:2px;pointer-events:none;animation:fall linear forwards}
     @keyframes fall{to{transform:translate3d(var(--dx),110vh,0) rotate(var(--rot));}}
     @media(max-width:650px){
@@ -185,6 +228,127 @@
       var answerDraft = '';
       var hostNameDraft = '';
       var joinCodeDraft = '';
+      var customDraft = null;
+      var lastPrompt = '';
+      var linkRoom = '';
+      try { var fromLink = (new URLSearchParams(location.search).get('room') || '').toUpperCase().replace(/[^A-Z]/g, ''); if (fromLink.length === 4) { linkRoom = fromLink; joinCodeDraft = fromLink; } } catch (_e) {}
+      var linkFocused = false;
+      function joinUrl(){ return location.origin + location.pathname + '?room=' + encodeURIComponent(room ? room.code : ''); }
+      function clearLink(){ if (location.search) { try { history.replaceState(null, '', location.pathname); } catch (_e) {} } linkRoom = ''; }
+
+      // Sound effects made with Web Audio, so there are no files to load.
+      var muted = false;
+      try { muted = localStorage.getItem('hiveMute') === '1'; } catch (_e) {}
+      var audioCtx = null;
+      function audio(){
+        if (muted) return null;
+        if (!audioCtx) { var Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return null; try { audioCtx = new Ctx(); } catch (_e) { return null; } }
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(function(){});
+        return audioCtx;
+      }
+      function tone(freq, dur, type, delay, vol){
+        var a = audio(); if (!a) return;
+        var t = a.currentTime + (delay || 0), o = a.createOscillator(), g = a.createGain();
+        o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + dur + 0.05);
+      }
+      var sfx = {
+        tick: function(){ tone(1046, 0.05, 'square', 0, 0.04); },
+        start: function(){ tone(523, 0.12, 'triangle'); tone(784, 0.18, 'triangle', 0.1); try { navigator.vibrate && navigator.vibrate([60, 40, 60]); } catch (_e) {} },
+        reveal: function(){ tone(660, 0.1, 'sine'); tone(990, 0.16, 'sine', 0.08); },
+        join: function(){ tone(740, 0.08, 'sine', 0, 0.08); },
+        pop: function(){ tone(1320, 0.05, 'sine', 0, 0.05); },
+        fanfare: function(){ [523, 659, 784, 1046].forEach(function(f, i){ tone(f, 0.22, 'triangle', i * 0.12, 0.12); }); try { navigator.vibrate && navigator.vibrate([80, 40, 80, 40, 160]); } catch (_e) {} }
+      };
+      var lastTick = -1;
+
+      // Small QR code generator (byte mode, error correction level M, versions 1 to 10).
+      var QR = (function(){
+        var ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26], BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+        function mul(x, y){ var z = 0; for (var i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 255; }
+        function divisor(d){ var r = []; for (var i = 0; i < d - 1; i++) r.push(0); r.push(1); var root = 1; for (var k = 0; k < d; k++) { for (var j = 0; j < r.length; j++) { r[j] = mul(r[j], root); if (j + 1 < r.length) r[j] ^= r[j + 1]; } root = mul(root, 2); } return r; }
+        function remainder(data, div){ var r = div.map(function(){ return 0; }); data.forEach(function(b){ var f = b ^ r.shift(); r.push(0); div.forEach(function(c, i){ r[i] ^= mul(c, f); }); }); return r; }
+        function rawModules(v){ var r = (16 * v + 128) * v + 64; if (v >= 2) { var n = Math.floor(v / 7) + 2; r -= (25 * n - 10) * n - 55; if (v >= 7) r -= 36; } return r; }
+        function dataCodewords(v){ return Math.floor(rawModules(v) / 8) - ECC[v] * BLOCKS[v]; }
+        function alignment(v){ if (v === 1) return []; var n = Math.floor(v / 7) + 2, step = Math.ceil((v * 4 + 4) / (n * 2 - 2)) * 2, r = [6]; for (var pos = v * 4 + 10; r.length < n; pos -= step) r.splice(1, 0, pos); return r; }
+        function make(text){
+          var bytes = unescape(encodeURIComponent(text)).split('').map(function(c){ return c.charCodeAt(0); });
+          var v = 1; while (v <= 10 && 4 + (v < 10 ? 8 : 16) + bytes.length * 8 > dataCodewords(v) * 8) v++;
+          if (v > 10) return null;
+          var bits = []; function put(val, len){ for (var i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); }
+          put(4, 4); put(bytes.length, v < 10 ? 8 : 16); bytes.forEach(function(b){ put(b, 8); });
+          var cap = dataCodewords(v) * 8; put(0, Math.min(4, cap - bits.length)); put(0, (8 - bits.length % 8) % 8);
+          for (var pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) put(pad, 8);
+          var data = []; for (var i = 0; i < bits.length; i += 8) { var b = 0; for (var j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; data.push(b); }
+          var nb = BLOCKS[v], el = ECC[v], raw = Math.floor(rawModules(v) / 8), nshort = nb - raw % nb, slen = Math.floor(raw / nb), div = divisor(el), blocks = [], k = 0;
+          for (var bi = 0; bi < nb; bi++) { var len = slen - el + (bi < nshort ? 0 : 1), dat = data.slice(k, k + len); k += len; var ec = remainder(dat, div); if (bi < nshort) dat.push(0); blocks.push(dat.concat(ec)); }
+          var cw = []; for (var ci = 0; ci < blocks[0].length; ci++) for (var cj = 0; cj < blocks.length; cj++) if (ci !== slen - el || cj >= nshort) cw.push(blocks[cj][ci]);
+          var size = v * 4 + 17, m = [], fn = [];
+          for (var y = 0; y < size; y++) { m.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+          function set(x, y2, d){ m[y2][x] = d; fn[y2][x] = true; }
+          for (var t = 0; t < size; t++) { set(6, t, t % 2 === 0); set(t, 6, t % 2 === 0); }
+          [[3, 3], [size - 4, 3], [3, size - 4]].forEach(function(c){ for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) { var d = Math.max(Math.abs(dx), Math.abs(dy)), xx = c[0] + dx, yy = c[1] + dy; if (xx >= 0 && xx < size && yy >= 0 && yy < size) set(xx, yy, d !== 2 && d !== 4); } });
+          var ap = alignment(v), n = ap.length;
+          for (var ai = 0; ai < n; ai++) for (var aj = 0; aj < n; aj++) { if ((ai === 0 && aj === 0) || (ai === 0 && aj === n - 1) || (ai === n - 1 && aj === 0)) continue; for (var ady = -2; ady <= 2; ady++) for (var adx = -2; adx <= 2; adx++) set(ap[ai] + adx, ap[aj] + ady, Math.max(Math.abs(adx), Math.abs(ady)) !== 1); }
+          function format(mask){
+            var rem = mask; for (var i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+            var f = ((mask << 10) | rem) ^ 0x5412; function bit(i){ return ((f >>> i) & 1) !== 0; }
+            for (var a = 0; a <= 5; a++) set(8, a, bit(a)); set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8)); for (var c = 9; c < 15; c++) set(14 - c, 8, bit(c));
+            for (var e = 0; e < 8; e++) set(size - 1 - e, 8, bit(e)); for (var g = 8; g < 15; g++) set(8, size - 15 + g, bit(g)); set(8, size - 8, true);
+          }
+          format(0);
+          if (v >= 7) { var vr = v; for (var vi = 0; vi < 12; vi++) vr = (vr << 1) ^ ((vr >>> 11) * 0x1F25); var vb = (v << 12) | vr; for (var vj = 0; vj < 18; vj++) { var on = ((vb >>> vj) & 1) !== 0, va = size - 11 + vj % 3, vbb = Math.floor(vj / 3); set(va, vbb, on); set(vbb, va, on); } }
+          var idx = 0;
+          for (var right = size - 1; right >= 1; right -= 2) { if (right === 6) right = 5; for (var vert = 0; vert < size; vert++) for (var jj = 0; jj < 2; jj++) { var x = right - jj, up = ((right + 1) & 2) === 0, yy2 = up ? size - 1 - vert : vert; if (!fn[yy2][x] && idx < cw.length * 8) { m[yy2][x] = ((cw[idx >>> 3] >>> (7 - (idx & 7))) & 1) !== 0; idx++; } } }
+          function flip(mask){ for (var y3 = 0; y3 < size; y3++) for (var x3 = 0; x3 < size; x3++) { var inv; switch (mask) { case 0: inv = (x3 + y3) % 2 === 0; break; case 1: inv = y3 % 2 === 0; break; case 2: inv = x3 % 3 === 0; break; case 3: inv = (x3 + y3) % 3 === 0; break; case 4: inv = (Math.floor(x3 / 3) + Math.floor(y3 / 2)) % 2 === 0; break; case 5: inv = x3 * y3 % 2 + x3 * y3 % 3 === 0; break; case 6: inv = (x3 * y3 % 2 + x3 * y3 % 3) % 2 === 0; break; default: inv = ((x3 + y3) % 2 + x3 * y3 % 3) % 2 === 0; } if (!fn[y3][x3] && inv) m[y3][x3] = !m[y3][x3]; } }
+          function penalty(){ var p = 0, dark = 0; for (var y4 = 0; y4 < size; y4++) { var runR = 1, runC = 1; for (var x4 = 0; x4 < size; x4++) { if (m[y4][x4]) dark++; if (x4 > 0) { if (m[y4][x4] === m[y4][x4 - 1]) { runR++; if (runR === 5) p += 3; else if (runR > 5) p++; } else runR = 1; if (m[x4][y4] === m[x4 - 1][y4]) { runC++; if (runC === 5) p += 3; else if (runC > 5) p++; } else runC = 1; } if (x4 > 0 && y4 > 0 && m[y4][x4] === m[y4 - 1][x4] && m[y4][x4] === m[y4][x4 - 1] && m[y4][x4] === m[y4 - 1][x4 - 1]) p += 3; } } return p + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10; }
+          var best = 0, bestScore = Infinity;
+          for (var mk = 0; mk < 8; mk++) { flip(mk); format(mk); var sc = penalty(); if (sc < bestScore) { bestScore = sc; best = mk; } flip(mk); }
+          flip(best); format(best);
+          return m;
+        }
+        return function svg(text){
+          var m = make(text); if (!m) return '';
+          var size = m.length, q = 4, d = '';
+          for (var y = 0; y < size; y++) for (var x = 0; x < size; x++) if (m[y][x]) d += 'M' + (x + q) + ' ' + (y + q) + 'h1v1h-1z';
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + (size + q * 2) + ' ' + (size + q * 2) + '" shape-rendering="crispEdges" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#ffffff"/><path d="' + d + '" fill="#1a0f2e"/></svg>';
+        };
+      })();
+
+      // Emoji reactions float up over everyone's screen.
+      var REACTS = ['😂', '🔥', '🤯', '👏', '😱', '🐝'];
+      var reactLayer = document.createElement('div'); reactLayer.className = 'react-layer'; reactLayer.setAttribute('aria-hidden', 'true'); document.body.appendChild(reactLayer);
+      var seenReactions = {}, primedFor = '', lastReactAt = 0;
+      function floatReaction(r){
+        var el = document.createElement('div'); el.className = 'react-float';
+        el.style.left = (8 + Math.random() * 80) + 'vw';
+        el.innerHTML = '<span class="react-emoji">' + esc(r.e) + '</span><span class="react-name">' + esc(r.by) + '</span>';
+        reactLayer.appendChild(el); setTimeout(function(){ el.remove(); }, 3200);
+      }
+      function processReactions(state){
+        var list = state.reactions || [];
+        if (primedFor !== state.code) { primedFor = state.code; seenReactions = {}; list.forEach(function(r){ seenReactions[r.id] = 1; }); return; }
+        list.forEach(function(r){ if (!seenReactions[r.id]) { seenReactions[r.id] = 1; floatReaction(r); sfx.pop(); } });
+      }
+      function reactBar(){ return '<div class="react-bar" role="group" aria-label="Send a reaction">' + REACTS.map(function(e){ return '<button type="button" class="react-btn" data-action="react" data-e="' + e + '" aria-label="React ' + e + '">' + e + '</button>'; }).join('') + '</div>'; }
+      function settingsPanel(){
+        var st = room.settings || { rounds: room.roundCount, seconds: room.roundSeconds, pack: 'mixed', packName: 'Mixed bag', customCount: 0 };
+        if (!room.isHost) return '<div class="settings-summary"><span class="feature-chip">' + st.rounds + ' rounds</span><span class="feature-chip">' + st.seconds + 's timer</span><span class="feature-chip">' + esc(st.packName) + '</span></div>';
+        function seg(key, values, current, suffix){ return '<div class="seg" role="group">' + values.map(function(v){ return '<button type="button" class="seg-btn' + (v === current ? ' on' : '') + '" aria-pressed="' + (v === current) + '" data-action="setting" data-key="' + key + '" data-value="' + v + '">' + v + suffix + '</button>'; }).join('') + '</div>'; }
+        var packs = (room.packs || []).concat([{ id: 'custom', name: 'Your own prompts' }]);
+        var html = '<div class="settings"><div class="side-title"><h2>Game settings</h2><span class="count-badge">Host only</span></div>'
+          + '<div class="setting-row"><span class="setting-label">Rounds</span>' + seg('rounds', [5, 8, 12], st.rounds, '') + '</div>'
+          + '<div class="setting-row"><span class="setting-label">Timer</span>' + seg('seconds', [20, 30, 45], st.seconds, 's') + '</div>'
+          + '<div class="setting-row"><span class="setting-label">Prompts</span><div class="seg pack-seg" role="group">' + packs.map(function(pk){ return '<button type="button" class="seg-btn' + (pk.id === st.pack ? ' on' : '') + '" aria-pressed="' + (pk.id === st.pack) + '" data-action="setting" data-key="pack" data-value="' + esc(pk.id) + '">' + esc(pk.name) + '</button>'; }).join('') + '</div></div>';
+        if (st.pack === 'custom') html += '<label class="field-label" for="customPrompts">Your prompts, one per line (up to 30)</label><textarea class="field textarea" id="customPrompts" rows="5" maxlength="2400" placeholder="A snack you could eat every day&#10;Something you would take to space">' + esc(customDraft !== null ? customDraft : (st.custom || []).join('\n')) + '</textarea><div class="custom-row"><span class="helper">' + st.customCount + ' saved. Any rounds left over use the mixed bag.</span><button type="button" class="btn btn-quiet" data-action="savecustom">Save prompts</button></div>';
+        return html + '</div>';
+      }
+      function awardsHtml(){
+        var list = room.awards || []; if (!list.length) return '';
+        var icons = { queen: '♛', soulmates: '♥', lone: '✦' };
+        return '<div class="awards">' + list.map(function(a){ return '<div class="award award-' + esc(a.id) + '"><span class="award-icon" aria-hidden="true">' + (icons[a.id] || '★') + '</span><div class="award-title">' + esc(a.title) + '</div><div class="award-names">' + a.names.map(esc).join(' &amp; ') + '</div><div class="award-detail">' + esc(a.detail) + '</div></div>'; }).join('') + '</div>';
+      }
       var joinNameDraft = '';
       var serverOffset = 0;
       var lastPhase = '';
@@ -206,11 +370,11 @@
       function currentPlayer(){return room && room.players.find(function(player){return player.id===room.selfId;});}
       function orderedPlayers(){return room ? room.players.slice().sort(function(a,b){return b.score-a.score || a.name.localeCompare(b.name);}) : [];}
       function topbar(){
-        return '<div class="wrap"><header class="topbar"><a class="brand" href="#" aria-label="Hive Mind home"><span class="brand-mark">⬡</span><span class="brand-name">HIVE <span>/</span> MIND</span></a><div class="top-meta"><span class="minor">8 rounds · 30 seconds each</span><span class="local-pill">LIVE PARTY</span></div></header></div>';
+        return '<div class="wrap"><header class="topbar"><a class="brand" href="#" aria-label="Hive Mind home"><span class="brand-mark">⬡</span><span class="brand-name">HIVE <span>/</span> MIND</span></a><div class="top-meta">'+(room?'<span class="minor">'+room.roundCount+' rounds · '+room.roundSeconds+' seconds each</span>':'<span class="minor">2–12 players · no sign-up</span>')+'<button class="icon-btn sound-btn" type="button" data-action="mute" aria-label="'+(muted?'Turn sound on':'Turn sound off')+'" title="'+(muted?'Sound off':'Sound on')+'">'+(muted?'🔇':'🔊')+'</button><span class="local-pill">LIVE PARTY</span></div></header></div>';
       }
       function errorHtml(){return errorMessage ? '<div class="error-banner" role="alert">'+esc(errorMessage)+'</div>' : '';}
       function landing(){
-        return topbar() + '<main class="wrap landing"><section class="landing-copy"><div class="eyebrow">A social guessing game</div><h1>Find your<br><em>hive mind.</em></h1><p class="lead">Eight quick prompts. One answer each. See who thinks alike — and how many minds make a match.</p><div class="feature-row"><span class="feature-chip">2–12 players</span><span class="feature-chip">No account needed</span><span class="feature-chip">A little bit psychic</span></div></section><section class="form-stack"><div class="form-card primary"><div class="card-heading"><div><h2>Start a hive</h2><p>Make a room and invite your people.</p></div><span class="step-no">01</span></div><form id="createForm"><label class="field-label" for="hostName">Your nickname</label><input class="field" id="hostName" name="name" maxlength="18" autocomplete="nickname" placeholder="e.g. Sunny" value="'+esc(hostNameDraft)+'" required><button class="btn btn-primary" type="submit">Create a room <span aria-hidden="true">↗</span></button></form></div><div class="form-card"><div class="card-heading"><div><h2>Join a hive</h2><p>Enter the four-letter code from your host.</p></div><span class="step-no">02</span></div><form id="joinForm"><div class="join-fields"><div><label class="field-label" for="joinCode">Room code</label><input class="field" id="joinCode" name="code" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD" value="'+esc(joinCodeDraft)+'" required></div><div><label class="field-label" for="joinName">Your nickname</label><input class="field" id="joinName" name="name" maxlength="18" autocomplete="nickname" placeholder="e.g. Momo" value="'+esc(joinNameDraft)+'" required></div></div><button class="btn btn-secondary" type="submit">Join the room <span aria-hidden="true">→</span></button></form>'+errorHtml()+'</div></section></main>';
+        return topbar() + '<main class="wrap landing"><section class="landing-copy"><div class="eyebrow">A social guessing game</div><h1>Find your<br><em>hive mind.</em></h1><p class="lead">Quick prompts. One answer each. See who thinks alike — and how many minds make a match.</p><div class="feature-row"><span class="feature-chip">2–12 players</span><span class="feature-chip">No account needed</span><span class="feature-chip">A little bit psychic</span></div></section><section class="form-stack"><div class="form-card primary"><div class="card-heading"><div><h2>Start a hive</h2><p>Make a room and invite your people.</p></div><span class="step-no">01</span></div><form id="createForm"><label class="field-label" for="hostName">Your nickname</label><input class="field" id="hostName" name="name" maxlength="18" autocomplete="nickname" placeholder="e.g. Sunny" value="'+esc(hostNameDraft)+'" required><button class="btn btn-primary" type="submit">Create a room <span aria-hidden="true">↗</span></button></form></div><div class="form-card"><div class="card-heading"><div><h2>Join a hive</h2><p>'+(linkRoom?'You were invited to room <b>'+esc(linkRoom)+'</b>. Add your name to jump in.':'Enter the four-letter code from your host.')+'</p></div><span class="step-no">02</span></div><form id="joinForm"><div class="join-fields"><div><label class="field-label" for="joinCode">Room code</label><input class="field" id="joinCode" name="code" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD" value="'+esc(joinCodeDraft)+'" required></div><div><label class="field-label" for="joinName">Your nickname</label><input class="field" id="joinName" name="name" maxlength="18" autocomplete="nickname" placeholder="e.g. Momo" value="'+esc(joinNameDraft)+'" required></div></div><button class="btn btn-secondary" type="submit">Join the room <span aria-hidden="true">→</span></button></form>'+errorHtml()+'</div></section></main>';
       }
       function warning(){return room && !room.hostConnected ? '<div class="host-warning" role="status"><strong>The host disconnected.</strong> Their room is saved. They can reload to resume, or you can wait here for them to reconnect.</div>' : '';}
       function roomHead(kicker,title){
@@ -218,8 +382,8 @@
       }
       function roomFoot(){return '<div class="footer-note">Answers stay private until the reveal · everyone sees the same room live</div></main>';}
       function roomProgress(){
-        var html='<div class="round-track" aria-label="Round '+room.round+' of 8">';
-        for(var i=1;i<=8;i++){html+='<i class="'+(i<room.round?'done':i===room.round?'current':'')+'"></i>';}
+        var html='<div class="round-track" aria-label="Round '+room.round+' of '+room.roundCount+'">';
+        for(var i=1;i<=room.roundCount;i++){html+='<i class="'+(i<room.round?'done':i===room.round?'current':'')+'"></i>';}
         return html+'</div>';
       }
       function playerRows(){
@@ -227,22 +391,22 @@
         room.players.forEach(function(player){
           var state=player.locked && room.phase==='playing' ? 'Locked' : player.connected ? 'Here' : 'Away';
           var cls=player.locked && room.phase==='playing' ? 'player-status ready' : 'player-status';
-          html+='<div class="player-row"><span class="player-avatar">'+esc(initials(player.name))+'</span><span class="player-name">'+esc(player.name)+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="'+cls+'">'+state+'</span>'+(room.isHost&&!player.isHost?'<button class="kick-btn" type="button" data-action="kick" data-pid="'+esc(player.id)+'" data-confirm="Remove?" aria-label="Remove '+esc(player.name)+'">Remove</button>':'')+'</div>';
+          html+='<div class="player-row'+(player.id===room.selfId?' me':'')+'"><span class="player-avatar">'+esc(initials(player.name))+'</span><span class="player-name">'+esc(player.name)+(player.id===room.selfId?'<span class="you-tag">YOU</span>':'')+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="'+cls+'">'+state+'</span>'+(room.isHost&&!player.isHost?'<button class="kick-btn host-btn" type="button" data-action="makehost" data-pid="'+esc(player.id)+'" data-confirm="Make host?" aria-label="Make '+esc(player.name)+' the host">Make host</button><button class="kick-btn" type="button" data-action="kick" data-pid="'+esc(player.id)+'" data-confirm="Remove?" aria-label="Remove '+esc(player.name)+'">Remove</button>':'')+'</div>';
         });
         html+='</div>';
         if(room.players.length<12 && room.phase==='lobby')html+='<div class="empty-slot">'+(12-room.players.length)+' open seats · up to 12 players</div>';
         return html;
       }
-      function rulesBlock(){return '<div class="side-divider"></div><div class="rules-list"><div class="rule"><b>01</b><span>Answer the same prompt before the 30-second timer ends.</span></div><div class="rule"><b>02</b><span>Matching answers score one point for every player in the match.</span></div><div class="rule"><b>03</b><span>Unique answers score zero. The biggest match becomes the hive answer.</span></div></div>';}
+      function rulesBlock(){return '<div class="side-divider"></div><div class="rules-list"><div class="rule"><b>01</b><span>Answer the same prompt before the timer runs out.</span></div><div class="rule"><b>02</b><span>Matching answers score one point for every player in the match.</span></div><div class="rule"><b>03</b><span>Unique answers score zero. The biggest match becomes the hive answer.</span></div></div>';}
       function lobby(){
         var title=room.isHost?'Your hive is ready.':'You made it to the hive.';
         var start=room.isHost?'<button class="btn btn-primary" type="button" data-action="start" '+(room.playerCount<2?'disabled':'')+'>'+(room.playerCount<2?'Waiting for one more player':'Start the game')+' <span aria-hidden="true">↗</span></button>':'<div class="wait-note">You are in. The host will start when everyone is ready.</div>';
-        return roomHead('THE LOBBY','<em>'+esc(title)+'</em>')+'<div class="phase-layout"><section class="main-panel"><div class="code-share"><div class="share-top"><div><p>Share this code with your players</p><div class="big-code">'+esc(room.code)+'</div></div><button class="btn btn-quiet" data-action="copy" type="button">Copy code</button></div></div><div class="side-title"><h2>Players in the room</h2><span class="count-badge">'+room.playerCount+' / 12</span></div>'+playerRows()+'<div class="room-actions">'+start+(room.isHost&&room.playerCount<2?'<p class="helper">A game needs at least 2 players. Open another tab to join your preview room.</p>':'')+'</div></section><aside class="side-panel"><div class="side-title"><h2>How to play</h2><span class="hive-symbol">⬡</span></div><div class="lobby-rules"><div class="lobby-rule"><b>Think alike</b><span>Eight prompts. Everyone answers the same one.</span></div><div class="lobby-rule"><b>Stay secret</b><span>Your answer stays hidden until time is up.</span></div><div class="lobby-rule"><b>Find the hive</b><span>Every player in a match earns the full group size.</span></div></div>'+rulesBlock()+'</aside></div>'+roomFoot();
+        return roomHead('THE LOBBY','<em>'+esc(title)+'</em>')+'<div class="phase-layout"><section class="main-panel"><div class="code-share"><div class="share-top"><div><p>Scan the code or share the link to join</p><div class="big-code">'+esc(room.code)+'</div></div><div class="qr" role="img" aria-label="QR code that opens room '+esc(room.code)+'">'+QR(joinUrl())+'</div></div><div class="share-actions"><button class="btn btn-quiet" data-action="copylink" type="button">Copy invite link</button>'+(navigator.share?'<button class="btn btn-secondary" data-action="share" type="button">Share</button>':'')+'<button class="btn btn-ghost" data-action="copy" type="button">Copy code</button></div></div>'+settingsPanel()+'<div class="side-title"><h2>Players in the room</h2><span class="count-badge">'+room.playerCount+' / 12</span></div>'+playerRows()+'<div class="room-actions">'+start+(room.isHost&&room.playerCount<2?'<p class="helper">A game needs at least 2 players. Share the invite link or QR code.</p>':'')+'</div></section><aside class="side-panel"><div class="side-title"><h2>How to play</h2><span class="hive-symbol">⬡</span></div><div class="lobby-rules"><div class="lobby-rule"><b>Think alike</b><span>'+room.roundCount+' prompts. Everyone answers the same one.</span></div><div class="lobby-rule"><b>Stay secret</b><span>Your answer stays hidden until time is up.</span></div><div class="lobby-rule"><b>Find the hive</b><span>Every player in a match earns the full group size.</span></div></div>'+rulesBlock()+reactBar()+'</aside></div>'+roomFoot();
       }
       function liveScoreboard(){
         var list=orderedPlayers();
         var html='<div class="score-caption">TOTAL <span style="float:right">ROUND GAIN</span></div><div class="score-list">';
-        list.forEach(function(player,index){html+='<div class="score-row"><span class="score-rank">'+String(index+1).padStart(2,'0')+'</span><span class="score-name">'+esc(player.name)+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="score-gain '+(player.roundPoints>0?'positive':'')+'">'+(player.roundPoints>0?'+'+player.roundPoints:'—')+'</span><span class="score-total">'+player.score+'</span></div>';});
+        list.forEach(function(player,index){html+='<div class="score-row'+(player.id===room.selfId?' me':'')+'"><span class="score-rank">'+String(index+1).padStart(2,'0')+'</span><span class="score-name">'+esc(player.name)+(player.id===room.selfId?'<span class="you-tag">YOU</span>':'')+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="score-gain '+(player.roundPoints>0?'positive':'')+'">'+(player.roundPoints>0?'+'+player.roundPoints:'—')+'</span><span class="score-total">'+player.score+'</span></div>';});
         return html+'</div>';
       }
       function gameSide(){
@@ -251,10 +415,10 @@
       function playing(){
         var self=currentPlayer();
         var isLocked=Boolean(self&&self.locked);
-        var timer='<div class="timer-row"><div class="timer-copy"><div class="timer-orb" id="timerValue">30</div><div><strong>Time to think</strong><span id="timerCaption">Lock in when you are ready</span></div></div><div class="timer-line" aria-hidden="true"><i id="timerBar"></i></div></div>';
+        var timer='<div class="timer-row"><div class="timer-copy"><div class="timer-orb" id="timerValue">'+room.roundSeconds+'</div><div><strong>Time to think</strong><span id="timerCaption">Lock in when you are ready</span></div></div><div class="timer-line" aria-hidden="true"><i id="timerBar"></i></div></div>';
         var buttonLabel=isLocked?'Update answer':'Lock in answer';
-        var answerCard='<div class="answer-box"><div class="answer-title"><strong>Your answer</strong><span class="private-badge">Only you can see this</span></div><form id="answerForm"><div class="answer-entry"><input class="field" id="answerInput" maxlength="80" autocomplete="off" value="'+esc(answerDraft)+'" placeholder="Type your answer…" aria-label="Your private answer" required><button class="btn btn-primary" type="submit" '+(actionBusy?'disabled':'')+'>'+buttonLabel+' <span aria-hidden="true">↗</span></button></div><p class="helper">Your answer stays hidden from the others until the round ends. You can edit it while the timer is running.</p>'+(isLocked?'<div class="locked-note">Locked in · still editable</div>':'')+'</form></div>';
-        return roomHead('ROUND '+room.round+' OF 8','<em>Think like your people.</em>')+'<div class="phase-layout"><section class="main-panel"><div class="phase-top"><div class="round-label"><strong>ROUND '+room.round+'</strong> / 08</div>'+roomProgress()+'</div><div class="prompt-zone"><div class="prompt-label">Same question for everyone</div><h2 class="prompt">'+esc(room.prompt)+'</h2></div>'+timer+answerCard+'</section>'+gameSide()+'</div>'+roomFoot();
+        var answerCard='<div class="answer-box"><div class="answer-title"><strong>Your answer</strong><span class="private-badge">Only you can see this</span></div><form id="answerForm"><div class="answer-entry"><input class="field" id="answerInput" maxlength="80" autocomplete="off" value="'+esc(answerDraft)+'" placeholder="Type your answer…" aria-label="Your private answer" required><button class="btn btn-primary" type="submit" '+(actionBusy?'disabled':'')+'>'+buttonLabel+' <span aria-hidden="true">↗</span></button></div><p class="helper">Your answer stays hidden from the others until the round ends. You can edit it while the timer is running.</p>'+(isLocked?'<div class="locked-note">Locked in · still editable</div>':'')+'</form>'+(room.isHost?'<div class="host-tools"><button type="button" class="btn btn-ghost" data-action="skip" data-confirm="Tap again to skip">Skip this prompt</button><span class="helper">Swaps in a new prompt and restarts the timer.</span></div>':'')+'</div>'+reactBar();
+        return roomHead('ROUND '+room.round+' OF '+room.roundCount,'<em>Think like your people.</em>')+'<div class="phase-layout"><section class="main-panel"><div class="phase-top"><div class="round-label"><strong>ROUND '+room.round+'</strong> / '+String(room.roundCount).padStart(2,'0')+'</div>'+roomProgress()+'</div><div class="prompt-zone"><div class="prompt-label">Same question for everyone</div><h2 class="prompt">'+esc(room.prompt)+'</h2></div>'+timer+answerCard+'</section>'+gameSide()+'</div>'+roomFoot();
       }
       function renderGroups(){
         var reveal=room.reveal||{groups:[],noAnswer:[]};
@@ -275,7 +439,8 @@
       function revealSide(finished){
         var html='<aside class="side-panel">';
         if(finished){
-          html+='<div class="winners-card"><div class="winner-kicker">'+(room.winners.length>1?'Shared win':'The winner')+'</div><div class="winner-names">'+room.winners.map(esc).join(' &amp; ')+'</div><p class="winner-copy">'+(room.winners.length>1?'A tie worth celebrating.':'Found the hive mind across all 8 rounds.')+'</p></div><div class="side-title"><h2>Final scores</h2><span class="hive-symbol">⬡</span></div><div class="finish-scoreboard">'+liveScoreboard()+'</div>';
+          html+='<div class="winners-card"><div class="winner-kicker">'+(room.winners.length>1?'Shared win':'The winner')+'</div><div class="winner-names">'+room.winners.map(esc).join(' &amp; ')+'</div><p class="winner-copy">'+(room.winners.length>1?'A tie worth celebrating.':'Found the hive mind across all '+room.roundCount+' rounds.')+'</p></div><div class="side-title"><h2>Final scores</h2><span class="hive-symbol">⬡</span></div><div class="finish-scoreboard">'+liveScoreboard()+'</div>';
+          if(room.isHost)html+=settingsPanel();
           html+='<div class="room-actions">'+(room.isHost?'<button class="btn btn-primary" type="button" data-action="restart" '+(actionBusy?'disabled':'')+'>Start a new game <span aria-hidden="true">↻</span></button>':'<div class="wait-note">The host can start another game with this group.</div>')+'</div>';
         }else{
           html+='<div class="side-title"><h2>Scoreboard</h2><span class="hive-symbol">⬡</span></div>'+liveScoreboard();
@@ -286,8 +451,8 @@
       }
       function reveal(finished){
         var title=finished?'The hive has spoken.':'So… who thought alike?';
-        var subtitle=finished?'Eight rounds. The final scores are in.':'Round '+room.round+' · “'+esc(room.prompt)+'”';
-        return roomHead(finished?'FINAL SCORES':'ROUND '+room.round+' REVEAL','<em>'+title+'</em>')+'<div class="phase-layout"><section class="main-panel"><div class="phase-top"><div class="round-label"><strong>'+ (finished?'FINAL REVEAL':'THE REVEAL')+'</strong> / '+String(room.round).padStart(2,'0')+'</div>'+roomProgress()+'</div><h2 class="reveal-heading">'+(finished?'Your last round, revealed.':'Who landed on the same answer?')+'</h2><p class="reveal-subtitle">'+subtitle+'</p>'+renderGroups()+'</section>'+revealSide(finished)+'</div>'+roomFoot();
+        var subtitle=finished?room.roundCount+' rounds. The final scores are in.':'Round '+room.round+' · “'+esc(room.prompt)+'”';
+        return roomHead(finished?'FINAL SCORES':'ROUND '+room.round+' REVEAL','<em>'+title+'</em>')+'<div class="phase-layout"><section class="main-panel"><div class="phase-top"><div class="round-label"><strong>'+ (finished?'FINAL REVEAL':'THE REVEAL')+'</strong> / '+String(room.round).padStart(2,'0')+'</div>'+roomProgress()+'</div><h2 class="reveal-heading">'+(finished?'Your last round, revealed.':'Who landed on the same answer?')+'</h2><p class="reveal-subtitle">'+subtitle+'</p>'+(finished?awardsHtml():'')+renderGroups()+reactBar()+'</section>'+revealSide(finished)+'</div>'+roomFoot();
       }
       var celebrated='';
       function confetti(big){
@@ -303,9 +468,9 @@
         }
       }
       function render(){
-        if(room&&(room.phase==='reveal'||room.phase==='finished')){var ck=room.code+room.phase+room.round;if(ck!==celebrated){celebrated=ck;var hasMatch=room.reveal&&room.reveal.groups.some(function(g){return g.hive;});if(room.phase==='finished'||hasMatch)setTimeout(function(){confetti(room&&room.phase==='finished');},150);}}
+        if(room&&(room.phase==='reveal'||room.phase==='finished')){var ck=room.code+room.phase+room.round;if(ck!==celebrated){celebrated=ck;if(room.phase==='finished')sfx.fanfare();else sfx.reveal();var hasMatch=room.reveal&&room.reveal.groups.some(function(g){return g.hive;});if(room.phase==='finished'||hasMatch)setTimeout(function(){confetti(room&&room.phase==='finished');},150);}}
         var me=currentPlayer();
-        var key=room?[room.phase,room.round,room.hostConnected,Boolean(me&&me.locked),actionBusy].join('|'):'none';
+        var key=room?[room.phase,room.round,room.prompt,room.hostConnected,Boolean(me&&me.locked),actionBusy].join('|'):'none';
         var side=document.querySelector('.side-panel');
         if(room&&room.phase==='playing'&&key===paintedKey&&side&&document.getElementById('answerInput')){
           // Same round, same local state: refresh only the player list and scores so the answer box keeps focus.
@@ -316,10 +481,11 @@
         paintedKey=key;
         var focused=document.activeElement&&document.activeElement.id;
         var selectionStart=null,selectionEnd=null;
-        if(focused==='answerInput')try{selectionStart=document.activeElement.selectionStart;selectionEnd=document.activeElement.selectionEnd;}catch(_e){}
+        if(focused==='answerInput'||focused==='customPrompts')try{selectionStart=document.activeElement.selectionStart;selectionEnd=document.activeElement.selectionEnd;}catch(_e){}
         if(!room){app.innerHTML=landing();}else if(room.phase==='lobby'){app.innerHTML=lobby();}else if(room.phase==='playing'){app.innerHTML=playing();}else{app.innerHTML=reveal(room.phase==='finished');}
-        if(focused==='answerInput'){
-          var input=document.getElementById('answerInput');
+        if(!room&&linkRoom&&!linkFocused){linkFocused=true;var nameBox=document.getElementById('joinName');if(nameBox)setTimeout(function(){nameBox.focus();},50);}
+        if(focused==='answerInput'||focused==='customPrompts'){
+          var input=document.getElementById(focused);
           if(input){input.focus({preventScroll:true});try{input.setSelectionRange(selectionStart,selectionEnd);}catch(_e){}}
         }
         updateTimer();
@@ -327,11 +493,12 @@
       function updateTimer(){
         if(!room||room.phase!=='playing'||!room.deadlineAt)return;
         var seconds=Math.max(0,Math.ceil((room.deadlineAt-(Date.now()+serverOffset))/1000));
+        if(seconds<=5&&seconds>0&&seconds!==lastTick){lastTick=seconds;sfx.tick();}
         var orb=document.getElementById('timerValue');
         var bar=document.getElementById('timerBar');
         var caption=document.getElementById('timerCaption');
         if(orb){orb.textContent=String(seconds).padStart(2,'0');orb.classList.toggle('urgent',seconds<=7);}
-        if(bar){bar.style.transform='scaleX('+Math.max(0,seconds/30)+')';bar.classList.toggle('urgent',seconds<=7);}
+        if(bar){bar.style.transform='scaleX('+Math.max(0,seconds/(room.roundSeconds||30))+')';bar.classList.toggle('urgent',seconds<=7);}
         if(caption)caption.textContent=seconds===0?'Revealing answers…':seconds<=7?'Almost out of time':currentPlayer()&&currentPlayer().locked?'You can still update your answer':'Lock in when you are ready';
       }
       var pollTimer=null;
@@ -346,9 +513,13 @@
       }
       function applyState(next){
         if(next.phase==='closed'){exitRoom(next.isHost?'You ended the room.':next.closedReason==='empty'?'Everyone left, so the room closed.':'The host ended this room. Thanks for playing!');return;}
-        var phaseChanged=!room||next.phase!==lastPhase||next.round!==lastRound;
+        processReactions(next);
+        var phaseChanged=!room||next.phase!==lastPhase||next.round!==lastRound||(next.phase==='playing'&&next.prompt!==lastPrompt);
+        if(phaseChanged&&next.phase==='playing'&&room&&(room.phase!=='playing'||room.round!==next.round||room.prompt!==next.prompt)){sfx.start();lastTick=-1;}
+        if(room&&next.phase==='lobby'&&next.playerCount>room.playerCount)sfx.join();
+        lastPrompt=next.prompt||'';
         serverOffset=next.serverNow-Date.now();
-        var sig=JSON.stringify(Object.assign({},next,{serverNow:0}));
+        var sig=JSON.stringify(Object.assign({},next,{serverNow:0,reactions:0}));
         if(!phaseChanged&&sig===lastSig)return;
         lastSig=sig;
         room=next;
@@ -383,6 +554,9 @@
       }
       function saveRoom(state){
         if(state&&state.phase==='closed'){exitRoom('You ended the room.');return;}
+        clearLink();
+        processReactions(state);
+        if(state.phase==='playing'&&state.prompt!==lastPrompt){lastPhase='';lastPrompt=state.prompt||'';lastTick=-1;}
         room=state;roomCode=state.code;sessionStorage.setItem('hiveMindRoom',roomCode);serverOffset=state.serverNow-Date.now();
         if(state.phase!==lastPhase||state.round!==lastRound){answerDraft=state.ownAnswer||'';lastPhase=state.phase;lastRound=state.round;}
         errorMessage='';connectLive();render();
@@ -403,6 +577,7 @@
         if(event.target.id==='hostName')hostNameDraft=event.target.value;
         if(event.target.id==='joinCode'){event.target.value=event.target.value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,4);joinCodeDraft=event.target.value;}
         if(event.target.id==='joinName')joinNameDraft=event.target.value;
+        if(event.target.id==='customPrompts')customDraft=event.target.value;
       });
       app.addEventListener('submit',function(event){
         event.preventDefault();
@@ -425,6 +600,13 @@
         if(!button)return;
         var action=button.getAttribute('data-action');
         if(action==='copy'){copyCode();return;}
+        if(!muted)audio();
+        if(action==='mute'){muted=!muted;try{localStorage.setItem('hiveMute',muted?'1':'0');}catch(_e){}if(!muted)sfx.pop();var sb=document.querySelector('.sound-btn');if(sb){sb.textContent=muted?'🔇':'🔊';sb.setAttribute('aria-label',muted?'Turn sound on':'Turn sound off');sb.title=muted?'Sound off':'Sound on';}return;}
+        if(action==='copylink'){var link=joinUrl();if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(link).then(function(){showToast('Invite link copied');}).catch(function(){showToast(link);});else showToast(link);return;}
+        if(action==='share'){try{navigator.share({title:'Hive Mind',text:'Join my Hive Mind room '+room.code,url:joinUrl()}).catch(function(){});}catch(_e){}return;}
+        if(action==='react'){var now=Date.now();if(now-lastReactAt<600)return;lastReactAt=now;post('/api/rooms/'+encodeURIComponent(roomCode)+'/react',{playerId:playerId,emoji:button.getAttribute('data-e')}).then(applyState).catch(function(){});return;}
+        if(action==='setting'){var key=button.getAttribute('data-key'),val=button.getAttribute('data-value'),body={playerId:playerId};body[key]=key==='pack'?val:Number(val);busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/settings',body).then(saveRoom);});return;}
+        if(action==='savecustom'){var box=document.getElementById('customPrompts');var lines=(box?box.value:'').split('\n').map(function(t){return t.trim();}).filter(Boolean);busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/settings',{playerId:playerId,custom:lines}).then(function(state){customDraft=null;showToast(state.settings.customCount+' prompts saved');saveRoom(state);});});return;}
         // Leave, end and remove need a second tap, since there is no undo.
         if(button.hasAttribute('data-confirm')&&button.getAttribute('data-armed')!=='1'){
           var label=button.textContent;
@@ -434,6 +616,8 @@
         }
         if(action==='leave'){var leavingCode=roomCode;busy(function(){return post('/api/rooms/'+encodeURIComponent(leavingCode)+'/leave',{playerId:playerId}).catch(function(){}).then(function(){exitRoom('');showToast('You left the room');});});return;}
         if(action==='close'){busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/close',{playerId:playerId}).then(saveRoom);});return;}
+        if(action==='makehost'){var newHost=button.getAttribute('data-pid');busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/host',{playerId:playerId,target:newHost}).then(function(state){showToast('Host passed on');saveRoom(state);});});return;}
+        if(action==='skip'){busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/skip',{playerId:playerId}).then(function(state){answerDraft='';saveRoom(state);});});return;}
         if(action==='kick'){var target=button.getAttribute('data-pid');busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/kick',{playerId:playerId,target:target}).then(function(state){showToast('Player removed');saveRoom(state);});});return;}
         if(action==='start')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/start',{playerId:playerId}).then(saveRoom);});
         if(action==='next')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/next',{playerId:playerId}).then(saveRoom);});

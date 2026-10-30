@@ -4,6 +4,13 @@ A party game for 2–12 players. Everyone gets the same prompt and 30 seconds to
 
 Players join from any phone or laptop with a four-letter room code. No accounts or installs.
 
+## Features
+
+- Join with a four-letter code, an invite link or a QR code
+- Host settings: 5, 8 or 12 rounds; a 20, 30 or 45 second timer; prompt packs or your own prompts
+- Host tools: skip a prompt, pass the host role, remove players, end the room
+- Emoji reactions, sound effects with a mute button, and end-of-game awards
+
 ## Play online (Vercel)
 
 The live version runs as Vercel Functions with room state in Upstash Redis.
@@ -32,4 +39,4 @@ Then open `http://127.0.0.1:4173`. Open a second browser window, such as a priva
 
 - `index.html` – the game screens
 - `api/` and `lib/` – the online game server for Vercel
-- `server.js` – a single-file server for playing locally
+- `server.js` – runs the same game on your own computer, with rooms kept in memory
