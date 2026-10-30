@@ -147,6 +147,12 @@
     .toast{background:var(--lime);color:var(--ink);border:3px solid #0d0719;font-weight:800;font-size:14px;box-shadow:0 4px 0 #0d0719}
     .footer-note{color:#8f7db5;font-size:11px}
     @keyframes pop{from{opacity:0;transform:scale(.7)}to{opacity:1}}
+    .room-tools{flex-wrap:wrap}
+    .room-btn{height:44px;padding:0 16px;border-radius:999px;border:3px solid #0d0719;background:var(--panel-2);color:var(--text);font:800 14px var(--display);box-shadow:0 4px 0 #0d0719;cursor:pointer}
+    .room-btn.danger{background:var(--red);color:#fff}
+    .room-btn.armed,.kick-btn.armed{background:var(--honey);color:var(--ink);animation:shake .5s ease 2}
+    .kick-btn{margin-left:6px;height:30px;padding:0 10px;border-radius:999px;border:2px solid var(--red);background:transparent;color:#ffb3c0;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap}
+    .kick-btn:hover{background:var(--red);color:#fff}
     .confetti{position:fixed;top:-20px;z-index:20;width:10px;height:16px;border-radius:2px;pointer-events:none;animation:fall linear forwards}
     @keyframes fall{to{transform:translate3d(var(--dx),110vh,0) rotate(var(--rot));}}
     @media(max-width:650px){
@@ -194,7 +200,7 @@
       function initials(name){return String(name || '?').trim().split(/\s+/).slice(0,2).map(function(part){return part.charAt(0).toUpperCase();}).join('') || '?';}
       function post(path, data){return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(parseResponse);}
       function get(path){return fetch(path,{cache:'no-store',headers:{'X-Player-Id':playerId}}).then(parseResponse);}
-      function parseResponse(response){return response.json().then(function(data){if(!response.ok)throw new Error(data.error || 'That did not work. Try again.');return data;});}
+      function parseResponse(response){return response.json().then(function(data){if(!response.ok){var failure=new Error(data.error || 'That did not work. Try again.');failure.status=response.status;failure.reason=data.reason||'';throw failure;}return data;});}
       function showToast(message){toastNode.textContent=message;toastNode.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastNode.classList.remove('show');},1900);}
       function setError(message){errorMessage=message || '';render();}
       function currentPlayer(){return room && room.players.find(function(player){return player.id===room.selfId;});}
@@ -208,7 +214,7 @@
       }
       function warning(){return room && !room.hostConnected ? '<div class="host-warning" role="status"><strong>The host disconnected.</strong> Their room is saved. They can reload to resume, or you can wait here for them to reconnect.</div>' : '';}
       function roomHead(kicker,title){
-        return topbar()+'<main class="wrap room-shell">'+warning()+'<div class="room-heading"><div><div class="room-kicker">'+esc(kicker)+'</div><h1>'+title+'</h1></div><div class="room-tools"><div class="code-pill"><small>ROOM</small><b>'+esc(room.code)+'</b></div><button class="icon-btn" type="button" data-action="copy" aria-label="Copy room code" title="Copy room code">⧉</button></div></div>'+errorHtml();
+        return topbar()+'<main class="wrap room-shell">'+warning()+'<div class="room-heading"><div><div class="room-kicker">'+esc(kicker)+'</div><h1>'+title+'</h1></div><div class="room-tools"><div class="code-pill"><small>ROOM</small><b>'+esc(room.code)+'</b></div><button class="icon-btn" type="button" data-action="copy" aria-label="Copy room code" title="Copy room code">⧉</button>'+(room.isHost?'<button class="room-btn danger" type="button" data-action="close" data-confirm="Tap again to end">End room</button>':'')+'<button class="room-btn" type="button" data-action="leave" data-confirm="'+(room.isHost&&room.playerCount>1?'Tap again · host passes on':'Tap again to leave')+'">Leave</button></div></div>'+errorHtml();
       }
       function roomFoot(){return '<div class="footer-note">Answers stay private until the reveal · everyone sees the same room live</div></main>';}
       function roomProgress(){
@@ -221,7 +227,7 @@
         room.players.forEach(function(player){
           var state=player.locked && room.phase==='playing' ? 'Locked' : player.connected ? 'Here' : 'Away';
           var cls=player.locked && room.phase==='playing' ? 'player-status ready' : 'player-status';
-          html+='<div class="player-row"><span class="player-avatar">'+esc(initials(player.name))+'</span><span class="player-name">'+esc(player.name)+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="'+cls+'">'+state+'</span></div>';
+          html+='<div class="player-row"><span class="player-avatar">'+esc(initials(player.name))+'</span><span class="player-name">'+esc(player.name)+(player.isHost?'<span class="host-tag">HOST</span>':'')+'</span><span class="'+cls+'">'+state+'</span>'+(room.isHost&&!player.isHost?'<button class="kick-btn" type="button" data-action="kick" data-pid="'+esc(player.id)+'" data-confirm="Remove?" aria-label="Remove '+esc(player.name)+'">Remove</button>':'')+'</div>';
         });
         html+='</div>';
         if(room.players.length<12 && room.phase==='lobby')html+='<div class="empty-slot">'+(12-room.players.length)+' open seats · up to 12 players</div>';
@@ -330,7 +336,16 @@
       }
       var pollTimer=null;
       var pollFailures=0;
+      function exitRoom(message){
+        clearTimeout(pollTimer);
+        try{sessionStorage.removeItem('hiveMindRoom');}catch(_e){}
+        roomCode='';room=null;lastPhase='';lastRound=0;lastSig='';paintedKey='';answerDraft='';
+        errorMessage=message||'';
+        render();
+        try{window.scrollTo(0,0);}catch(_e){}
+      }
       function applyState(next){
+        if(next.phase==='closed'){exitRoom(next.isHost?'You ended the room.':next.closedReason==='empty'?'Everyone left, so the room closed.':'The host ended this room. Thanks for playing!');return;}
         var phaseChanged=!room||next.phase!==lastPhase||next.round!==lastRound;
         serverOffset=next.serverNow-Date.now();
         var sig=JSON.stringify(Object.assign({},next,{serverNow:0}));
@@ -349,7 +364,8 @@
           get('/api/rooms/'+encodeURIComponent(code)).then(function(next){
             if(code!==roomCode)return;
             pollFailures=0;document.body.dataset.live='connected';applyState(next);
-          }).catch(function(){
+          }).catch(function(error){
+            if(code===roomCode&&(error.status===403||error.status===404||error.status===410)){exitRoom(error.reason==='removed'?'The host removed you from the room.':error.message);return;}
             pollFailures+=1;if(room)document.body.dataset.live='reconnecting';
           }).finally(function(){
             if(code!==roomCode)return;
@@ -366,6 +382,7 @@
         }).catch(function(error){sessionStorage.removeItem('hiveMindRoom');roomCode='';room=null;errorMessage=error.message;render();return false;});
       }
       function saveRoom(state){
+        if(state&&state.phase==='closed'){exitRoom('You ended the room.');return;}
         room=state;roomCode=state.code;sessionStorage.setItem('hiveMindRoom',roomCode);serverOffset=state.serverNow-Date.now();
         if(state.phase!==lastPhase||state.round!==lastRound){answerDraft=state.ownAnswer||'';lastPhase=state.phase;lastRound=state.round;}
         errorMessage='';connectLive();render();
@@ -408,6 +425,16 @@
         if(!button)return;
         var action=button.getAttribute('data-action');
         if(action==='copy'){copyCode();return;}
+        // Leave, end and remove need a second tap, since there is no undo.
+        if(button.hasAttribute('data-confirm')&&button.getAttribute('data-armed')!=='1'){
+          var label=button.textContent;
+          button.setAttribute('data-armed','1');button.classList.add('armed');button.textContent=button.getAttribute('data-confirm');
+          setTimeout(function(){if(document.body.contains(button)){button.removeAttribute('data-armed');button.classList.remove('armed');button.textContent=label;}},3500);
+          return;
+        }
+        if(action==='leave'){var leavingCode=roomCode;busy(function(){return post('/api/rooms/'+encodeURIComponent(leavingCode)+'/leave',{playerId:playerId}).catch(function(){}).then(function(){exitRoom('');showToast('You left the room');});});return;}
+        if(action==='close'){busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/close',{playerId:playerId}).then(saveRoom);});return;}
+        if(action==='kick'){var target=button.getAttribute('data-pid');busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/kick',{playerId:playerId,target:target}).then(function(state){showToast('Player removed');saveRoom(state);});});return;}
         if(action==='start')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/start',{playerId:playerId}).then(saveRoom);});
         if(action==='next')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/next',{playerId:playerId}).then(saveRoom);});
         if(action==='restart')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/start',{playerId:playerId}).then(saveRoom);});
