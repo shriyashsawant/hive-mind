@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 
 const PORT = Number(process.env.PORT || 4173);
 const HOST = '127.0.0.1';
@@ -12,6 +13,21 @@ const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
 const ROUND_MS = 30_000;
 const HOST_GRACE_MS = 12_000;
 const CODE_CHARS = 'BCDFGHJKLMNPQRSTVWXYZ';
+const MAX_ROOMS = 2000;
+const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_STREAMS_PER_PLAYER = 3;
+const MAX_STREAMS_PER_ROOM = 40;
+const RESERVED_IDS = new Set(['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString', 'valueOf']);
+// Per-IP budgets. A whole classroom can share one IP, so action and read budgets are generous.
+const LIMITS = { create: [10, 60_000], join: [60, 60_000], action: [900, 60_000], read: [900, 60_000] };
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+};
 const PROMPTS = [
   'A pizza topping', 'Something you take to the beach', 'A breakfast food', 'A sound that wakes you up',
   'A place to go on a first date', 'Something found in a backpack', 'A popular ice cream flavor', 'An animal you would not want as a roommate',
@@ -31,45 +47,100 @@ const PROMPTS = [
 
 let rooms = new Map();
 let streams = new Map();
-fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+try { fs.chmodSync(DATA_DIR, 0o700); if (fs.existsSync(DATA_FILE)) fs.chmodSync(DATA_FILE, 0o600); } catch (_) { /* best effort */ }
 try {
   const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  Object.entries(saved).forEach(([code, room]) => rooms.set(code, room));
+  Object.entries(saved).forEach(([code, room]) => {
+    if (!room || !Array.isArray(room.players) || !/^[A-Z]{4}$/.test(code)) return;
+    if (Date.now() - (room.updatedAt || 0) > ROOM_TTL_MS) return;
+    room.players.forEach(player => { if (!player.pid) player.pid = newPublicId(); });
+    rooms.set(code, room);
+  });
 } catch (_) { /* First run: no saved rooms yet. */ }
 
+function writeRoomsNow() {
+  saveTimer = null;
+  try {
+    const serialized = Object.fromEntries(rooms.entries());
+    const temp = DATA_FILE + '.tmp';
+    fs.writeFileSync(temp, JSON.stringify(serialized), { mode: 0o600 });
+    fs.renameSync(temp, DATA_FILE);
+  } catch (error) {
+    console.error('Could not save rooms:', error.message);
+  }
+}
+
+// Batch disk writes so busy rooms do not rewrite the file on every request.
+let saveTimer = null;
 function saveRooms() {
-  const serialized = Object.fromEntries(rooms.entries());
-  const temp = DATA_FILE + '.tmp';
-  fs.writeFileSync(temp, JSON.stringify(serialized, null, 2));
-  fs.renameSync(temp, DATA_FILE);
+  if (!saveTimer) saveTimer = setTimeout(writeRoomsNow, 400);
+}
+
+function newPublicId() {
+  return crypto.randomBytes(9).toString('base64url');
+}
+
+class ClientError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
+const buckets = new Map();
+function rateLimited(req, kind) {
+  const [max, windowMs] = LIMITS[kind];
+  const key = kind + ':' + (req.socket.remoteAddress || 'unknown');
+  const now = Date.now();
+  let bucket = buckets.get(key);
+  if (!bucket || now - bucket.start > windowMs) { bucket = { start: now, count: 0 }; buckets.set(key, bucket); }
+  bucket.count += 1;
+  return bucket.count > max;
 }
 
 function json(res, status, value) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
+    if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+      reject(new ClientError(415, 'Please send JSON.'));
+      return;
+    }
     let body = '';
+    let done = false;
     req.on('data', chunk => {
+      if (done) return;
       body += chunk;
-      if (body.length > 16_000) reject(new Error('Request is too large.'));
+      if (body.length > 4_000) {
+        done = true;
+        reject(new ClientError(413, 'Request is too large.'));
+      }
     });
     req.on('end', () => {
-      try { resolve(body ? JSON.parse(body) : {}); }
-      catch (_) { reject(new Error('Please send valid JSON.')); }
+      if (done) return;
+      done = true;
+      let value;
+      try { value = body ? JSON.parse(body) : {}; }
+      catch (_) { reject(new ClientError(400, 'Please send valid JSON.')); return; }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) { reject(new ClientError(400, 'Please send a JSON object.')); return; }
+      resolve(value);
     });
-    req.on('error', reject);
+    req.on('error', error => { if (!done) { done = true; reject(error); } });
   });
 }
 
+function stripInvisible(value) {
+  return String(value == null ? '' : value).normalize('NFKC').replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}]/gu, '');
+}
+
 function cleanName(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 18);
+  if (typeof value !== 'string') return '';
+  return stripInvisible(value).trim().replace(/\s+/g, ' ').slice(0, 18).trim();
 }
 
 function validPlayerId(value) {
-  return typeof value === 'string' && /^[a-zA-Z0-9_-]{8,80}$/.test(value);
+  return typeof value === 'string' && /^[a-zA-Z0-9_-]{16,80}$/.test(value) && !RESERVED_IDS.has(value);
 }
 
 function normalizeAnswer(value) {
@@ -77,11 +148,12 @@ function normalizeAnswer(value) {
   result = result.replace(/^[\s"'“”‘’([{]*?(?:a|an|the)\b[\s"'“”‘’)}\]]*/i, '');
   result = result.replace(/[’']/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
   result = result.split(' ').map(word => {
-    if (word.length < 4) return word;
-    if (/(ches|shes|xes|zes|sses|oes)$/.test(word)) return word.slice(0, -2);
-    if (/ies$/.test(word)) return word.slice(0, -3) + 'y';
-    if (/s$/.test(word) && !/(ss|us|is)$/.test(word)) return word.slice(0, -1);
-    return word;
+    // Reduce singular and plural forms to one shared stem: cookie/cookies, shoe/shoes, pepperoni/pepperonis.
+    let w = word;
+    if (w.length >= 4 && w.endsWith('s') && !/(ss|us)$/.test(w) && !/^(tennis|paris|chess|bus|gas|news)$/.test(w)) w = w.slice(0, -1);
+    if (w.length > 3 && w.endsWith('e')) w = w.slice(0, -1);
+    if (w.length > 2 && w.endsWith('i')) w = w.slice(0, -1) + 'y';
+    return w;
   }).join(' ');
   return result;
 }
@@ -96,15 +168,20 @@ function shuffle(list) {
 }
 
 function randomCode() {
-  let code = '';
-  do {
-    code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
-  } while (rooms.has(code));
-  return code;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const code = Array.from({ length: 4 }, () => CODE_CHARS[crypto.randomInt(CODE_CHARS.length)]).join('');
+    if (!rooms.has(code)) return code;
+  }
+  throw new ClientError(503, 'The server is busy right now. Try again in a minute.');
 }
 
 function playerFor(room, id) {
+  if (typeof id !== 'string' || !id) return undefined;
   return room.players.find(player => player.id === id);
+}
+
+function answerFor(room, id) {
+  return Object.prototype.hasOwnProperty.call(room.answers || {}, id) ? room.answers[id] : undefined;
 }
 
 function activeCount(room) {
@@ -115,7 +192,7 @@ function revealGroups(room) {
   const groups = new Map();
   const noAnswer = [];
   for (const player of room.players) {
-    const answer = room.answers[player.id];
+    const answer = answerFor(room, player.id);
     if (!answer || !answer.text || !answer.text.trim()) {
       noAnswer.push(player.name);
       continue;
@@ -172,23 +249,23 @@ function publicView(room, playerId) {
     prompt: room.phase === 'lobby' ? null : room.prompts[room.round - 1],
     deadlineAt: room.deadlineAt,
     serverNow: now,
-    hostId: room.hostId,
+    hostId: host ? host.pid : null,
     hostConnected: Boolean(host && now - host.lastSeen <= HOST_GRACE_MS),
     isHost: Boolean(self && self.id === room.hostId),
-    selfId: playerId,
+    selfId: self ? self.pid : null,
     selfName: self ? self.name : null,
     players: room.players.map(player => ({
-      id: player.id,
+      id: player.pid,
       name: player.name,
       score: player.score,
       roundPoints: player.roundPoints,
       isHost: player.id === room.hostId,
       connected: now - player.lastSeen <= HOST_GRACE_MS,
-      locked: Boolean(room.answers[player.id] && room.answers[player.id].locked)
+      locked: Boolean(answerFor(room, player.id) && answerFor(room, player.id).locked)
     })),
     lockedCount: activeCount(room),
     playerCount: room.players.length,
-    ownAnswer: room.phase === 'playing' && self && room.answers[self.id] ? room.answers[self.id].text : '',
+    ownAnswer: room.phase === 'playing' && self && answerFor(room, self.id) ? answerFor(room, self.id).text : '',
     reveal: hasReveal ? room.lastReveal : null,
     winners: room.phase === 'finished' ? room.players.filter(player => player.score === Math.max(...room.players.map(p => p.score))).map(player => player.name) : []
   };
@@ -220,8 +297,12 @@ function broadcastAll() {
 
 function addStream(code, playerId, res) {
   if (!streams.has(code)) streams.set(code, new Set());
+  const roomStreams = streams.get(code);
+  const mine = Array.from(roomStreams).filter(item => item.playerId === playerId);
+  while (mine.length >= MAX_STREAMS_PER_PLAYER) { const old = mine.shift(); roomStreams.delete(old); old.res.end(); }
+  if (roomStreams.size >= MAX_STREAMS_PER_ROOM) { res.end(); return; }
   const client = { playerId, res };
-  streams.get(code).add(client);
+  roomStreams.add(client);
   const room = rooms.get(code);
   const player = playerFor(room, playerId);
   if (player) {
@@ -243,7 +324,7 @@ function newRoom(hostId, name) {
   const room = {
     code,
     hostId,
-    players: [{ id: hostId, name, score: 0, roundPoints: 0, lastSeen: now }],
+    players: [{ id: hostId, pid: newPublicId(), name, score: 0, roundPoints: 0, lastSeen: now }],
     phase: 'lobby',
     round: 0,
     prompts: [],
@@ -277,12 +358,17 @@ async function handleApi(req, res, url) {
   const parts = url.pathname.split('/').filter(Boolean);
   const action = parts[1];
   const code = (parts[2] || '').toUpperCase();
+  if (parts.length > 4 || action !== 'rooms') return json(res, 404, { error: 'Unknown game endpoint.' });
+  if (code && !/^[A-Z]{4}$/.test(code)) return json(res, 404, { error: 'We could not find that room. Check the four-letter code and try again.' });
+  const kind = req.method === 'GET' ? 'read' : !code ? 'create' : parts[3] === 'join' ? 'join' : 'action';
+  if (rateLimited(req, kind)) return json(res, 429, { error: 'Slow down a little and try again in a minute.' });
 
   if (req.method === 'POST' && action === 'rooms' && !code) {
     const body = await readBody(req);
     const name = cleanName(body.name);
     if (!name) return json(res, 400, { error: 'Add a nickname to create your room.' });
     if (!validPlayerId(body.playerId)) return json(res, 400, { error: 'This browser session needs a fresh player ID. Refresh and try again.' });
+    if (rooms.size >= MAX_ROOMS) return json(res, 503, { error: 'The server is busy right now. Try again in a minute.' });
     const room = newRoom(body.playerId, name);
     return json(res, 201, publicView(room, body.playerId));
   }
@@ -295,6 +381,7 @@ async function handleApi(req, res, url) {
     const playerId = url.searchParams.get('playerId') || '';
     if (!playerFor(room, playerId)) return json(res, 403, { error: 'Join this room before opening its live updates.' });
     res.writeHead(200, {
+      ...SECURITY_HEADERS,
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
@@ -328,7 +415,7 @@ async function handleApi(req, res, url) {
     if (room.players.length >= 12) return json(res, 409, { error: 'This hive is full. Rooms can hold up to 12 players.' });
     const duplicate = room.players.some(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
     if (duplicate) return json(res, 409, { error: 'That nickname is already in this room. Try another one.' });
-    room.players.push({ id: body.playerId, name, score: 0, roundPoints: 0, lastSeen: Date.now() });
+    room.players.push({ id: body.playerId, pid: newPublicId(), name, score: 0, roundPoints: 0, lastSeen: Date.now() });
     saveRooms();
     broadcastAll();
     return json(res, 200, publicView(room, body.playerId));
@@ -339,7 +426,6 @@ async function handleApi(req, res, url) {
   room.updatedAt = Date.now();
 
   if (parts[3] === 'heartbeat') {
-    saveRooms();
     return json(res, 200, { ok: true });
   }
 
@@ -355,7 +441,7 @@ async function handleApi(req, res, url) {
   if (parts[3] === 'answer') {
     advanceIfExpired(room);
     if (room.phase !== 'playing') return json(res, 409, { error: 'This round has ended. The answers are being revealed.' });
-    const answer = String(body.answer || '').trim().slice(0, 80);
+    const answer = typeof body.answer === 'string' ? stripInvisible(body.answer).replace(/\s+/g, ' ').trim().slice(0, 80) : '';
     if (!answer) return json(res, 400, { error: 'Add an answer before you lock it in.' });
     room.answers[player.id] = { text: answer, locked: true, updatedAt: Date.now() };
     room.updatedAt = Date.now();
@@ -381,12 +467,19 @@ async function handleApi(req, res, url) {
   return json(res, 404, { error: 'Unknown game action.' });
 }
 
+const ALLOWED_HOSTS = new Set(['127.0.0.1:' + PORT, 'localhost:' + PORT, '[::1]:' + PORT]);
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://' + HOST + ':' + PORT);
+  if (HOST === '127.0.0.1' && !ALLOWED_HOSTS.has(String(req.headers.host || '').toLowerCase())) {
+    res.writeHead(421, SECURITY_HEADERS); res.end('Misdirected request'); return;
+  }
+  let url;
+  try { url = new URL(req.url, 'http://' + HOST + ':' + PORT); }
+  catch (_) { res.writeHead(400, SECURITY_HEADERS); res.end('Bad request'); return; }
   if (url.pathname.startsWith('/api/')) {
     try { await handleApi(req, res, url); }
     catch (error) {
-      if (!res.headersSent) json(res, 400, { error: error.message || 'Something went wrong.' });
+      if (!(error instanceof ClientError)) console.error(error);
+      if (!res.headersSent) json(res, error instanceof ClientError ? error.status : 500, { error: error instanceof ClientError ? error.message : 'Something went wrong. Try again.' });
       else res.end();
     }
     return;
@@ -394,12 +487,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== 'GET') return json(res, 405, { error: 'This preview only serves pages with GET.' });
   const file = url.pathname === '/' ? path.join(__dirname, 'index.html') : path.join(__dirname, path.basename(url.pathname));
   if (path.extname(file) !== '.html' && path.extname(file) !== '.ico' && path.extname(file) !== '.svg') {
-    res.writeHead(404); res.end('Not found'); return;
+    res.writeHead(404, SECURITY_HEADERS); res.end('Not found'); return;
   }
   fs.readFile(file, (error, contents) => {
-    if (error) { res.writeHead(404); res.end('Not found'); return; }
+    if (error) { res.writeHead(404, SECURITY_HEADERS); res.end('Not found'); return; }
     const contentType = file.endsWith('.html') ? 'text/html; charset=utf-8' : file.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon';
-    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': contentType, 'Cache-Control': 'no-store' });
     res.end(contents);
   });
 });
@@ -408,6 +501,21 @@ setInterval(() => {
   for (const room of rooms.values()) advanceIfExpired(room);
   broadcastAll();
 }, 1000).unref();
+
+setInterval(() => {
+  const now = Date.now();
+  let removed = false;
+  for (const [code, room] of rooms) {
+    const lastActive = Math.max(room.updatedAt || 0, ...room.players.map(player => player.lastSeen || 0));
+    if (now - lastActive > ROOM_TTL_MS && !streams.has(code)) { rooms.delete(code); removed = true; }
+  }
+  for (const [key, bucket] of buckets) if (now - bucket.start > 120_000) buckets.delete(key);
+  if (removed) saveRooms();
+}, 60_000).unref();
+
+function flushAndExit() { if (saveTimer) { clearTimeout(saveTimer); writeRoomsNow(); } process.exit(0); }
+process.on('SIGINT', flushAndExit);
+process.on('SIGTERM', flushAndExit);
 
 server.listen(PORT, HOST, () => {
   console.log('Hive Mind private preview ready at http://' + HOST + ':' + PORT);
