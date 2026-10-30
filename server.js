@@ -378,7 +378,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && parts[3] === 'events') {
     if (roomError(room, res)) return;
-    const playerId = url.searchParams.get('playerId') || '';
+    const playerId = String(req.headers['x-player-id'] || url.searchParams.get('playerId') || '');
     if (!playerFor(room, playerId)) return json(res, 403, { error: 'Join this room before opening its live updates.' });
     res.writeHead(200, {
       ...SECURITY_HEADERS,
@@ -393,7 +393,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && parts.length === 3) {
     if (roomError(room, res)) return;
-    const playerId = url.searchParams.get('playerId') || '';
+    const playerId = String(req.headers['x-player-id'] || url.searchParams.get('playerId') || '');
     const player = playerFor(room, playerId);
     if (!player) return json(res, 403, { error: 'This player is not in the room.' });
     player.lastSeen = Date.now();

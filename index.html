@@ -193,7 +193,7 @@
       function esc(value){return String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
       function initials(name){return String(name || '?').trim().split(/\s+/).slice(0,2).map(function(part){return part.charAt(0).toUpperCase();}).join('') || '?';}
       function post(path, data){return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(parseResponse);}
-      function get(path){return fetch(path,{cache:'no-store'}).then(parseResponse);}
+      function get(path){return fetch(path,{cache:'no-store',headers:{'X-Player-Id':playerId}}).then(parseResponse);}
       function parseResponse(response){return response.json().then(function(data){if(!response.ok)throw new Error(data.error || 'That did not work. Try again.');return data;});}
       function showToast(message){toastNode.textContent=message;toastNode.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastNode.classList.remove('show');},1900);}
       function setError(message){errorMessage=message || '';render();}
@@ -210,7 +210,7 @@
       function roomHead(kicker,title){
         return topbar()+'<main class="wrap room-shell">'+warning()+'<div class="room-heading"><div><div class="room-kicker">'+esc(kicker)+'</div><h1>'+title+'</h1></div><div class="room-tools"><div class="code-pill"><small>ROOM</small><b>'+esc(room.code)+'</b></div><button class="icon-btn" type="button" data-action="copy" aria-label="Copy room code" title="Copy room code">⧉</button></div></div>'+errorHtml();
       }
-      function roomFoot(){return '<div class="footer-note">Answers stay private until the reveal · room state is saved on this preview server</div></main>';}
+      function roomFoot(){return '<div class="footer-note">Answers stay private until the reveal · everyone sees the same room live</div></main>';}
       function roomProgress(){
         var html='<div class="round-track" aria-label="Round '+room.round+' of 8">';
         for(var i=1;i<=8;i++){html+='<i class="'+(i<room.round?'done':i===room.round?'current':'')+'"></i>';}
@@ -328,28 +328,40 @@
         if(bar){bar.style.transform='scaleX('+Math.max(0,seconds/30)+')';bar.classList.toggle('urgent',seconds<=7);}
         if(caption)caption.textContent=seconds===0?'Revealing answers…':seconds<=7?'Almost out of time':currentPlayer()&&currentPlayer().locked?'You can still update your answer':'Lock in when you are ready';
       }
+      var pollTimer=null;
+      var pollFailures=0;
+      function applyState(next){
+        var phaseChanged=!room||next.phase!==lastPhase||next.round!==lastRound;
+        serverOffset=next.serverNow-Date.now();
+        var sig=JSON.stringify(Object.assign({},next,{serverNow:0}));
+        if(!phaseChanged&&sig===lastSig)return;
+        lastSig=sig;
+        room=next;
+        if(phaseChanged){answerDraft=next.ownAnswer||'';lastPhase=next.phase;lastRound=next.round;}
+        render();
+      }
+      // Check the room about once a second while a round runs, a little slower otherwise.
       function connectLive(){
-        if(source)source.close();
+        clearTimeout(pollTimer);
         if(!roomCode)return;
-        source=new EventSource('/api/rooms/'+encodeURIComponent(roomCode)+'/events?playerId='+encodeURIComponent(playerId));
-        source.onmessage=function(event){
-          var next;
-          try{next=JSON.parse(event.data);}catch(_e){return;}
-          var phaseChanged=!room||next.phase!==lastPhase||next.round!==lastRound;
-          serverOffset=next.serverNow-Date.now();
-          var sig=JSON.stringify(Object.assign({},next,{serverNow:0}));
-          if(!phaseChanged&&sig===lastSig)return;
-          lastSig=sig;
-          room=next;
-          if(phaseChanged){answerDraft=next.ownAnswer||'';lastPhase=next.phase;lastRound=next.round;}
-          render();
-        };
-        source.onerror=function(){if(room)document.body.dataset.live='reconnecting';};
-        source.onopen=function(){document.body.dataset.live='connected';};
+        var code=roomCode;
+        function tick(){
+          get('/api/rooms/'+encodeURIComponent(code)).then(function(next){
+            if(code!==roomCode)return;
+            pollFailures=0;document.body.dataset.live='connected';applyState(next);
+          }).catch(function(){
+            pollFailures+=1;if(room)document.body.dataset.live='reconnecting';
+          }).finally(function(){
+            if(code!==roomCode)return;
+            var wait=document.hidden?5000:room&&room.phase==='playing'?1000:1600;
+            pollTimer=setTimeout(tick,Math.min(wait*Math.pow(1.5,pollFailures),10000));
+          });
+        }
+        pollTimer=setTimeout(tick,600);
       }
       function loadRoom(){
         if(!roomCode)return Promise.resolve(false);
-        return get('/api/rooms/'+encodeURIComponent(roomCode)+'?playerId='+encodeURIComponent(playerId)).then(function(state){
+        return get('/api/rooms/'+encodeURIComponent(roomCode)).then(function(state){
           room=state;serverOffset=state.serverNow-Date.now();answerDraft=state.ownAnswer||'';lastPhase=state.phase;lastRound=state.round;connectLive();render();return true;
         }).catch(function(error){sessionStorage.removeItem('hiveMindRoom');roomCode='';room=null;errorMessage=error.message;render();return false;});
       }
@@ -401,7 +413,6 @@
         if(action==='restart')busy(function(){return post('/api/rooms/'+encodeURIComponent(roomCode)+'/start',{playerId:playerId}).then(saveRoom);});
       });
       setInterval(updateTimer,250);
-      setInterval(function(){if(roomCode)post('/api/rooms/'+encodeURIComponent(roomCode)+'/heartbeat',{playerId:playerId}).catch(function(){});},3500);
       loadRoom().then(function(loaded){if(!loaded)render();});
     })();
   </script>

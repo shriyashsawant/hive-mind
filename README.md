@@ -1,26 +1,35 @@
-# Hive Mind — private review preview
+# Hive Mind
 
-Hive Mind is a mobile-first, room-based word-matching game. This review build includes a small local server so separate browser tabs can share a room, roster, round clock, and scores. Answers stay on the server and are omitted from every player's room view until the reveal.
+A party game for 2–12 players. Everyone gets the same prompt and 30 seconds to answer. Your answer scores one point for every player who said the same thing, including you. Unique answers score zero. After 8 rounds, the most in-sync player wins.
 
-## Open the preview
+Players join from any phone or laptop with a four-letter room code. No accounts or installs.
 
-1. Install Node.js 20 or newer if it is not already installed.
-2. From this folder, run `node server.js`.
-3. Open `http://127.0.0.1:4173` in a browser.
-4. Create a room in one tab. Open a second tab at the same address to join with the four-letter code.
+## Play online (Vercel)
 
-No packages, accounts, installs, or external services are used by the game itself.
+The live version runs as Vercel Functions with room state in Upstash Redis.
 
-## Preview limits
+1. Import this repository into Vercel, or run `vercel` in this folder.
+2. Add **Upstash for Redis** from the Vercel Marketplace and connect it to the project. This sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+3. Deploy with `vercel --prod`.
 
-The server binds to `127.0.0.1`, so this preview is private to the computer running it. Other people on the internet or other devices cannot join this build. The room database lives in the operating system's temporary-data folder at `hive-mind-private-preview/rooms.json`; it survives a server restart on this computer, but it is not cloud storage. For that reason, this is a real multi-tab local preview and not a remote multiplayer launch.
+Players' screens check the room about once a second. Rooms expire after 6 hours of inactivity.
 
-## Included
+## Run it on your own computer
 
-- 2–12 players, four-letter room codes, case-insensitive unique nicknames
-- 56 shuffled prompts, with eight distinct prompts per game
-- Server-owned 30-second deadlines, early reveal when every player locks in, and live roster updates
-- Private pre-reveal answers, answer editing, answer normalization, grouped reveals, per-round gains, final scores, shared wins, late joining, reload recovery, and host-disconnect notice
-- Host-controlled next-round and replay actions
+```
+node server.js
+```
 
-All room data stays on the local preview server. Stop it with `Ctrl+C`.
+Then open `http://127.0.0.1:4173`. Open a second browser window, such as a private window, to join as another player.
+
+## How it stays fair
+
+- Answers stay on the server until the reveal. No player's device receives another player's answer early.
+- Each browser keeps a secret player key. Other players only see random public IDs, so nobody can act as the host or as another player.
+- Requests are validated, rate limited and served with strict security headers.
+
+## Files
+
+- `index.html` – the game screens
+- `api/` and `lib/` – the online game server for Vercel
+- `server.js` – a single-file server for playing locally
